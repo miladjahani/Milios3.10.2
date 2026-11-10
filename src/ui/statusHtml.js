@@ -116,9 +116,7 @@ export function renderUserStatusPageHtml(user, nodes = [], originUrl = '') {
 
   const quickAccess = [
     { title: 'Clash / Mihomo', sub: 'YAML آماده', icon: 'layers', badge: 'YAML', url: `${baseSubUrl}?target=clash` },
-    { title: 'Sing-box / Hiddify', sub: 'JSON سبک', icon: 'api', badge: 'JSON', url: `${baseSubUrl}?target=singbox` },
-    { title: 'وب‌پروکسی تلگرام', sub: 'مشاهده کانال‌ها و ساخت MTProto', icon: 'telegram', badge: 'WEB', url: `${baseUrl}/webproxy` },
-    { title: 'پروکسی تلگرام', sub: 'لینک‌های Fake-TLS و SOCKS5', icon: 'link', badge: 'TG', url: `${baseUrl}/tg?format=links` }
+    { title: 'Sing-box / Hiddify', sub: 'JSON سبک', icon: 'api', badge: 'JSON', url: `${baseSubUrl}?target=singbox` }
   ];
   if (warpEnabled) {
     quickAccess.push({ title: 'WARP کامل', sub: 'همهٔ فرمت‌ها در یک ZIP', icon: 'warp', badge: 'ZIP', url: `${baseUrl}/warp/${encodeURIComponent(subToken)}?format=zip` });

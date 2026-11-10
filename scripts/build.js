@@ -30,6 +30,7 @@ const MODULE_ORDER = [
   'src/subscription/converters.js',
   'src/subscription/generator.js',
   'src/subscription/masqueBundle.js',
+  'src/telegram/webProxy.js',
   'src/core/runtime.js',
   'src/api/handlers.js',
   'src/ui/loginHtml.js',

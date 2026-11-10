@@ -67,3 +67,19 @@ CREATE TABLE IF NOT EXISTS traffic_hourly (
   bytes INTEGER NOT NULL DEFAULT 0,
   requests INTEGER NOT NULL DEFAULT 0
 );
+
+-- پروکسی تلگرام WEB (تک‌ردیفی): تنظیمات، وضعیت و آمار مصرف
+CREATE TABLE IF NOT EXISTS telegram_proxy (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT '',
+  secret TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'not_created',
+  enabled INTEGER NOT NULL DEFAULT 0,
+  last_seen INTEGER NOT NULL DEFAULT 0,
+  traffic_total INTEGER NOT NULL DEFAULT 0,
+  req_total INTEGER NOT NULL DEFAULT 0,
+  req_today INTEGER NOT NULL DEFAULT 0,
+  req_date TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0
+);

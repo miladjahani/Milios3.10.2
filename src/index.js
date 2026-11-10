@@ -37,12 +37,16 @@ import {
   handlePreferredIpsApi,
   handlePublicUserStatusApi,
   handleScannerApi,
-  handleTelegramProxyApi,
-  handleWebProxyRequest,
   handleUpdateApi,
   handleUpdateBundle,
   handleUsersApi
 } from './api/handlers.js';
+import {
+  handleTelegramProxyAdminApi,
+  handleTelegramProxyGenericRequest,
+  handleTelegramProxySessionRequest,
+  handleTelegramProxyWs
+} from './telegram/webProxy.js';
 import { renderLoginGatewayHtml } from './ui/loginHtml.js';
 import { renderUserStatusPageHtml } from './ui/statusHtml.js';
 import { renderAdminDashboardHtml } from './ui/adminHtml.js';
@@ -144,8 +148,12 @@ export default {
         }
       });
 
-      // ۱. هندل کردن ترافیک پروکسی WebSocket (VLESS + Trojan + UDP DNS)
+      // ۱. هندل کردن ترافیک پروکسی WebSocket
       if (isWebSocket) {
+        // کانال حمل فریم‌های پروکسی تلگرام (WEB proxy) — پیش از پروتکل VLESS/Trojan
+        if (url.pathname === '/api/v1/ws') {
+          return await handleTelegramProxyWs(request, env, ctx, url);
+        }
         return await handleWebSocketUpgrade(request, env, ctx, globalCfg, allUsers, adminUuid);
       }
 
@@ -159,8 +167,9 @@ export default {
         if (url.pathname.startsWith('/api/scanner/')) {
           return await handleScannerApi(request, env);
         }
-        if (url.pathname.startsWith('/api/telegram/')) {
-          return await handleTelegramProxyApi(request, env);
+        // شروع نشست پروکسی تلگرام (WEB proxy) — با توکن یک‌بارمصرف صفحهٔ پل
+        if (url.pathname === '/api/v1/session') {
+          return await handleTelegramProxySessionRequest(request, env, ctx, url);
         }
         const apiIdx = pathParts.indexOf('api');
         const prefix = pathParts.slice(0, apiIdx).join('/');
@@ -193,6 +202,10 @@ export default {
           }
         }
 
+        // مدیریت پروکسی تلگرام (ساخت، توقف، تغییر سکرت، حذف و آمار)
+        if (apiSubPath.startsWith('telegram-proxy/')) {
+          return await handleTelegramProxyAdminApi(request, env, ctx, url, apiSubPath);
+        }
         if (apiSubPath === 'config') {
           return await handleConfigApi(request, env);
         }
@@ -266,9 +279,11 @@ export default {
           });
         }
 
+        // ۴-۰: صفحهٔ پل و صفحهٔ عمومی پروکسی تلگرام روی ریشه (/ و /healthz)
+        const tgProxyResponse = await handleTelegramProxyGenericRequest(request, env, url);
+        if (tgProxyResponse) return tgProxyResponse;
+
         // ۴-۰: فایل‌های نصب اپ (PWA) — برای دسکتاپ و گوشی، بیرون از مسیر مدیریت
-        if (url.pathname === '/webproxy' || url.pathname === '/tg-web') return await handleWebProxyRequest(request, env);
-        if (url.pathname === '/tg' || url.pathname.startsWith('/tg/')) return await handleTelegramProxyApi(request, env);
         if (url.pathname === '/manifest.webmanifest') return pwaManifestResponse();
         if (url.pathname === '/sw.js') return pwaServiceWorkerResponse();
         if (url.pathname === '/pwa-icon.svg') return pwaIconResponse();

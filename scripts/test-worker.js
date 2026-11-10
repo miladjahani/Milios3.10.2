@@ -24,6 +24,7 @@ function createMockD1Database() {
   const store = new Map();
   store.set('users', []);
   store.set('system_config', []);
+  store.set('telegram_proxy', []);
 
   function getTableRows(table) {
     if (!store.has(table)) store.set(table, []);
@@ -87,6 +88,44 @@ function createMockD1Database() {
             store.set('users', filtered);
             return { success: true, meta: { changes: 1 } };
           }
+          if (s.includes('telegram_proxy')) {
+            const rows = getTableRows('telegram_proxy');
+            if (s.startsWith('DELETE')) {
+              store.set('telegram_proxy', []);
+              return { success: true, meta: { changes: 1 } };
+            }
+            if (s.startsWith('INSERT')) {
+              const [name, secret, status, enabled, lastSeen, traffic, reqTotal, reqToday, reqDate, createdAt, updatedAt] = this._binds;
+              rows[0] = {
+                id: 1, name, secret, status, enabled, last_seen: lastSeen,
+                traffic_total: traffic, req_total: reqTotal, req_today: reqToday, req_date: reqDate,
+                created_at: createdAt, updated_at: updatedAt
+              };
+              return { success: true, meta: { changes: 1 } };
+            }
+            if (s.startsWith('UPDATE')) {
+              const row = rows[0] || {
+                id: 1, name: '', secret: '', status: 'not_created', enabled: 0, last_seen: 0,
+                traffic_total: 0, req_total: 0, req_today: 0, req_date: ''
+              };
+              if (s.includes('traffic_total = 0')) {
+                row.traffic_total = 0;
+                row.req_total = 0;
+                row.req_today = 0;
+                row.req_date = '';
+              } else if (s.includes('traffic_total = traffic_total + ?')) {
+                const [bytes, reqs, today, reqsToday, reqsTodayAlt, date] = this._binds;
+                row.traffic_total = (Number(row.traffic_total) || 0) + bytes;
+                row.req_total = (Number(row.req_total) || 0) + reqs;
+                row.req_today = row.req_date === today ? (Number(row.req_today) || 0) + reqsToday : reqsTodayAlt;
+                row.req_date = date;
+              } else if (s.includes('last_seen = ?')) {
+                row.last_seen = this._binds[0];
+              }
+              rows[0] = row;
+              return { success: true, meta: { changes: 1 } };
+            }
+          }
           return { success: true, meta: { changes: 0 } };
         },
         async first(col) {
@@ -102,6 +141,12 @@ function createMockD1Database() {
             const val = this._binds[0];
             const rows = getTableRows('users');
             const hit = rows.find(r => r.id === val || r.uuid === val);
+            if (!hit) return null;
+            return col ? hit[col] : hit;
+          }
+          if (s.includes('FROM telegram_proxy')) {
+            const rows = getTableRows('telegram_proxy');
+            const hit = rows[0] || null;
             if (!hit) return null;
             return col ? hit[col] : hit;
           }
@@ -360,30 +405,106 @@ async function runTests() {
     await worker.scheduled({ cron: '*/30 * * * *' }, d1Env, { waitUntil: p => p });
     console.log('  ✓ تست ۷ (مسدودسازی SSRF به شبکه داخلی و اجرای بهینهٔ Cron بدون خطای 1101): موفق');
 
-    // تست ۸: وب‌پروکسی تلگرام (/webproxy)، سازندهٔ پروکسی تلگرام (/api/telegram/build و /tg) و قالب‌های اندرویدی
-    const tgApiResp = await worker.fetch(
+    // تست ۸: پروکسی تلگرام WEB — مسیرهای قدیمی حذف شده‌اند و API مدیریت روی مسیر ادمین پاسخ می‌دهد
+    const legacyTgApiResp = await worker.fetch(
       new Request('https://mili.pages.dev/api/telegram/build?country=DE&sni=www.google.com'),
       d1Env, {}
     );
-    assert.strictEqual(tgApiResp.status, 200, 'API ساخت پروکسی تلگرام باید کد 200 برگرداند');
-    const tgData = await tgApiResp.json();
-    assert.strictEqual(tgData.success, true);
-    assert.ok(tgData.secret.startsWith('ee'), 'سکرت Fake-TLS تلگرام باید با پیشوند استاندارد ee شروع شود');
-    assert.ok(Array.isArray(tgData.proxies) && tgData.proxies.length > 0, 'لیست پروکسی‌های تلگرام نباید خالی باشد');
+    assert.notStrictEqual(legacyTgApiResp.status, 200, 'مسیر قدیمی /api/telegram/build باید حذف شده باشد');
 
-    const webproxyUiResp = await worker.fetch(
+    const legacyWebProxyResp = await worker.fetch(
       new Request('https://mili.pages.dev/webproxy'),
       d1Env, {}
     );
-    assert.strictEqual(webproxyUiResp.status, 200, 'صفحهٔ وب‌پروکسی تلگرام (/webproxy) باید کد 200 برگرداند');
-    const webproxyHtml = await webproxyUiResp.text();
-    assert.ok(webproxyHtml.includes('وب‌پروکسی زندهٔ تلگرام'), 'رابط کاربری وب‌پروکسی تلگرام باید رندر شود');
+    assert.notStrictEqual(legacyWebProxyResp.status, 200, 'مسیر قدیمی /webproxy باید حذف شده باشد');
 
-    const webproxySsrfResp = await worker.fetch(
-      new Request('https://mili.pages.dev/webproxy?url=http://127.0.0.1:8080'),
+    const tgStatusResp = await worker.fetch(
+      new Request(`https://mili.pages.dev/${adminUuid}/api/telegram-proxy/status`, { headers: { Cookie: sessionCookie } }),
       d1Env, {}
     );
-    assert.strictEqual(webproxySsrfResp.status, 400, 'وب‌پروکسی باید آدرس‌های خصوصی/لوکال را مسدود کند');
+    assert.strictEqual(tgStatusResp.status, 200, 'API وضعیت پروکسی تلگرام باید کد 200 برگرداند');
+    const tgStatus = await tgStatusResp.json();
+    assert.strictEqual(tgStatus.success, true);
+    assert.strictEqual(tgStatus.configured, false, 'تا زمانی که پروکسی ساخته نشده، configured باید false باشد');
+    assert.strictEqual(tgStatus.port, 443, 'پورت پروکسی تلگرام WEB همیشه 443 است');
+
+    const tgSecret = '0123456789abcdef0123456789abcdef';
+    const adminApiBase = `https://mili.pages.dev/${adminUuid}/api/telegram-proxy`;
+    const tgSaveResp = await worker.fetch(new Request(`${adminApiBase}/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
+      body: JSON.stringify({ name: 'Telegram-Proxy', secret: tgSecret })
+    }), d1Env, {});
+    assert.strictEqual(tgSaveResp.status, 200, 'ساخت پروکسی تلگرام باید 200 برگرداند');
+    const tgSave = await tgSaveResp.json();
+    assert.strictEqual(tgSave.success, true);
+    assert.strictEqual(tgSave.secret, tgSecret);
+    assert.strictEqual(
+      tgSave.telegramUrl,
+      `https://t.me/webproxy?server=mili.pages.dev&secret=${tgSecret}`,
+      'لینک اتصال باید قالب رسمی t.me/webproxy را داشته باشد'
+    );
+
+    const tgEnabled = await (await worker.fetch(
+      new Request(`${adminApiBase}/status`, { headers: { Cookie: sessionCookie } }),
+      d1Env, {}
+    )).json();
+    assert.strictEqual(tgEnabled.configured, true);
+    assert.strictEqual(tgEnabled.active, true, 'پروکسی پس از ساخت باید فعال باشد');
+
+    // صفحهٔ عمومی پروکسی روی ریشه با همان لینک رسمی تلگرام
+    const tgPublicResp = await worker.fetch(
+      new Request(`https://mili.pages.dev/?server=mili.pages.dev&secret=${tgSecret}`),
+      d1Env, {}
+    );
+    assert.strictEqual(tgPublicResp.status, 200, 'صفحهٔ عمومی پروکسی تلگرام باید رندر شود');
+    const tgPublicHtml = await tgPublicResp.text();
+    assert.ok(tgPublicHtml.includes('t.me/webproxy'), 'صفحهٔ عمومی باید لینک وب‌پروکسی تلگرام را نشان دهد');
+
+    // صفحهٔ پل فقط با capability معتبر باز می‌شود؛ در غیر این صورت استتار 404
+    const tgBadBridge = await worker.fetch(
+      new Request(`https://mili.pages.dev/?bridge=${'b'.repeat(43)}`),
+      d1Env, {}
+    );
+    assert.strictEqual(tgBadBridge.status, 404, 'صفحهٔ پل با capability نامعتبر نباید لو برود');
+
+    // capability معتبر طبق قرارداد ثابت پروتکل تلگرام باید صفحهٔ پل را باز کند
+    const tgBridgeToken = nodeCrypto
+      .createHmac('sha256', Buffer.from(tgSecret, 'hex'))
+      .update('tdesktop-web-proxy-bridge-v1\n' + 'mili.pages.dev')
+      .digest('base64url');
+    const tgBridgeResp = await worker.fetch(
+      new Request(`https://mili.pages.dev/?bridge=${tgBridgeToken}`),
+      d1Env, {}
+    );
+    assert.strictEqual(tgBridgeResp.status, 200, 'صفحهٔ پل با capability معتبر باید رندر شود');
+    const tgBridgeHtml = await tgBridgeResp.text();
+    assert.ok(tgBridgeHtml.includes('tproxy-android-init'), 'صفحهٔ پل باید اسکریپت پل تلگرام را داشته باشد');
+
+    // نشست بدون توکن یک‌بارمصرف معتبر باید استتار شود
+    const tgBadSessionResp = await worker.fetch(new Request('https://mili.pages.dev/api/v1/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', Authorization: 'Bearer invalid.token' },
+      body: new Uint8Array([0x10, 0, 0, 0, 0, 0, 0, 1, 1])
+    }), d1Env, {});
+    assert.strictEqual(tgBadSessionResp.status, 404, 'نشست با توکن نامعتبر باید رد شود');
+
+    const tgHealthResp = await worker.fetch(new Request('https://mili.pages.dev/healthz'), d1Env, {});
+    assert.strictEqual(tgHealthResp.status, 200, 'بررسی سلامت پروکسی فعال باید 200 برگرداند');
+
+    const tgStopped = await (await worker.fetch(new Request(`${adminApiBase}/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
+      body: JSON.stringify({ enabled: false })
+    }), d1Env, {})).json();
+    assert.strictEqual(tgStopped.success, true);
+    assert.strictEqual(tgStopped.enabled, false, 'توقف موقت باید پروکسی را غیرفعال کند');
+
+    const tgDeleted = await (await worker.fetch(new Request(`${adminApiBase}/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: sessionCookie }
+    }), d1Env, {})).json();
+    assert.strictEqual(tgDeleted.success, true);
 
     const authedAdminResp = await worker.fetch(new Request(`https://mili.pages.dev/${adminUuid}`, { headers: { Cookie: sessionCookie } }), d1Env, {});
     const authedAdminHtml = await authedAdminResp.text();
@@ -395,7 +516,11 @@ async function runTests() {
       authedAdminHtml.includes('miliCursorFollower'),
       'پنل مدیریت باید شامل قالب‌های آمادهٔ اندرویدی، سوییچ تک‌حالته افکت پس‌زمینه و نشانگر موس اختصاصی باشد'
     );
-    console.log('  ✓ تست ۸ (وب‌پروکسی تلگرام /webproxy، سازندهٔ Fake-TLS MTProto و قالب‌های جامع اندرویدی): موفق');
+    assert.ok(
+      authedAdminHtml.includes('id="tgProxyModal"') && authedAdminHtml.includes('data-act="open-tg-proxy"'),
+      'تب کاربران باید دکمهٔ پروکسی تلگرام و پنجرهٔ مدیریت آن را داشته باشد'
+    );
+    console.log('  ✓ تست ۸ (حذف مسیرهای قدیمی پروکسی تلگرام و پاسخ API مدیریت پروکسی WEB): موفق');
 
     console.log('\n🎉 تمام تست‌های عملکردی، ضد بن کلادفلر، ضد فیلتر Pages.dev، امنیت، دیتابیس D1 و رابط کاربری ۱۰۰٪ پاس شدند!');
   } finally {

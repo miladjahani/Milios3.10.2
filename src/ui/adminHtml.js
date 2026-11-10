@@ -2908,7 +2908,6 @@ ${PWA_HEAD_TAGS}
               <div class="toolbar" style="flex-direction: column; align-items: stretch;">
                 <button class="btn primary" type="button" data-act="open-create">${icon('plus')} <span data-i18n="btn.newUser">کاربر جدید</span></button>
                 <button class="btn" type="button" data-act="go-scan">${icon('radar')} <span data-i18n="nav.scanner">اسکنر</span></button>
-                <button class="btn" type="button" data-act="open-tg">${icon('telegram')} وب‌پروکسی و پروکسی تلگرام</button>
                 <button class="btn" type="button" data-act="copy-master">${icon('copy')} <span data-i18n="btn.copyMaster">کپی سابلینک اصلی</span></button>
                 <button class="btn ghost" type="button" data-act="open-password">${icon('key')} <span data-i18n="btn.password">تغییر رمز مدیر</span></button>
                 <button class="btn ghost" type="button" data-act="copy-admin-path">${icon('copy')} کپی مسیر مدیریت</button>
@@ -2927,6 +2926,7 @@ ${PWA_HEAD_TAGS}
           <span class="dots"><i></i><i></i><i></i></span>
           <div class="window-title">${icon('users')} <span data-i18n="panel.users">کاربران</span> <span class="window-sub" data-i18n="panel.usersSub">مدیریت اشتراک و محدودیت</span></div>
           <div class="spacer"></div>
+          <button class="btn sm" type="button" data-act="open-tg-proxy">${icon('telegram')} پروکسی تلگرام</button>
           <button class="btn sm ghost" type="button" data-act="reload-users">${icon('refresh')} <span data-i18n="btn.reload">بروزرسانی</span></button>
           <button class="btn sm primary" type="button" data-act="open-create">${icon('plus')} <span data-i18n="btn.createUser">ایجاد کاربر</span></button>
         </div>
@@ -3171,46 +3171,98 @@ ${PWA_HEAD_TAGS}
     </div>
   </div>
 
-  <!-- پنجرهٔ ساخت وب‌پروکسی و پروکسی ضد فیلتر تلگرام (MTProto Fake-TLS & SOCKS5) -->
-  <div class="modal" id="tgModal" role="dialog" aria-modal="true" aria-labelledby="tgModalTitle">
+  <!-- مدیریت پروکسی تلگرام (WEB proxy — MTProto over WebSocket) -->
+  <div class="modal" id="tgProxyModal" role="dialog" aria-modal="true" aria-labelledby="tgProxyTitle">
     <div class="modal-card wide">
       <div class="modal-head">
-        <b id="tgModalTitle">${icon('telegram')} وب‌پروکسی و سازندهٔ پروکسی تلگرام</b>
-        <button class="icon-btn" type="button" data-act="close-modal" data-modal="tgModal" aria-label="بستن">${icon('close')}</button>
+        <b id="tgProxyTitle">${icon('telegram')} مدیریت پروکسی تلگرام</b>
+        <button class="icon-btn" type="button" data-act="close-modal" data-modal="tgProxyModal" aria-label="بستن">${icon('close')}</button>
       </div>
       <div class="modal-body">
-        <p class="help-lead">از این بخش می‌توانید مستقیماً وب‌پروکسی زندهٔ تلگرام را باز کنید یا با دامنهٔ Fake-TLS (برای عبور از فیلترینگ ایران) لینک‌های پروکسی تلگرام (MTProto و SOCKS5) بسازید.</p>
-        <div class="toolbar" style="margin-bottom: 14px;">
-          <a class="btn primary" href="/webproxy" target="_blank" rel="noopener">${icon('external')} باز کردن وب‌پروکسی تلگرام (/webproxy)</a>
-          <button class="btn" type="button" data-act="copy-tg-sub">${icon('copy')} کپی لینک اشتراک پروکسی تلگرام (/tg)</button>
-        </div>
-        <div class="form-grid" style="margin-bottom: 12px;">
-          <div class="field">
-            <label>کشور پروکسی تلگرام</label>
-            <select id="tgProxyCountry">
-              <option value="DE">آلمان (DE)</option>
-              <option value="NL">هلند (NL)</option>
-              <option value="FI">فنلاند (FI)</option>
-              <option value="SE">سوئد (SE)</option>
-              <option value="GB">بریتانیا (GB)</option>
-              <option value="US">آمریکا (US)</option>
-              <option value="TR">ترکیه (TR)</option>
-            </select>
+        <div id="tgpLoading" class="empty">در حال دریافت وضعیت پروکسی...</div>
+
+        <div id="tgpCreateView" style="display:none;">
+          <p class="help-lead">یک پروکسی اختصاصی تلگرام روی همین ورکر ساخته می‌شود؛ ترافیک از دیتاسنترهای تلگرام عبور می‌کند و سرور جداگانه‌ای لازم نیست.</p>
+          <div class="form-grid" style="margin-bottom: 12px;">
+            <div class="field">
+              <label>نام پروکسی</label>
+              <input type="text" id="tgpName" value="Telegram-Proxy" placeholder="Telegram-Proxy">
+            </div>
+            <div class="field">
+              <label>سکرت پروکسی (Secret)</label>
+              <input type="text" id="tgpSecretInput" class="mono" readonly dir="ltr" placeholder="۳۲ کاراکتر هگزا">
+            </div>
           </div>
-          <div class="field">
-            <label>دامنهٔ Fake-TLS (SNI ضد فیلتر)</label>
-            <input type="text" id="tgProxySni" class="mono" value="www.google.com" placeholder="www.google.com">
+          <div class="toolbar">
+            <button class="btn" type="button" data-act="tgp-random-secret">${icon('refresh')} تولید سکرت تصادفی</button>
+            <button class="btn primary" type="button" data-act="tgp-create">${icon('telegram')} ساخت و فعال‌سازی پروکسی</button>
           </div>
         </div>
-        <div class="toolbar" style="margin-bottom: 12px;">
-          <button class="btn primary" type="button" data-act="build-tg-proxy">${icon('bolt')} ساخت و دریافت پروکسی‌های تلگرام</button>
-        </div>
-        <div id="tgProxyList" class="table-wrap" style="padding: 10px;">
-          <div class="empty">روی «ساخت و دریافت پروکسی‌های تلگرام» کلیک کنید تا لینک‌های آمادهٔ اتصال نمایش داده شوند.</div>
+
+        <div id="tgpManageView" style="display:none;">
+          <div class="card" style="margin-bottom: 12px;">
+            <div class="kv"><span>وضعیت پروکسی</span><b id="tgpStatusText">—</b></div>
+            <div class="toolbar" style="margin-top: 10px;">
+              <button class="btn sm" type="button" data-act="tgp-reset-stats">${icon('refresh')} صفر کردن آمار</button>
+              <button class="btn sm" type="button" data-act="tgp-toggle" id="tgpToggleBtn">${icon('stop')} توقف موقت</button>
+              <button class="btn sm danger" type="button" data-act="tgp-delete">${icon('trash')} حذف پروکسی</button>
+            </div>
+          </div>
+
+          <div class="metrics" style="margin-bottom: 12px;">
+            <div class="metric">
+              <div class="metric-top"><span class="metric-label">حجم مصرفی کل</span><span class="metric-icon">${icon('database')}</span></div>
+              <div class="metric-value" id="tgpTraffic">0 <small>B</small></div>
+              <div class="metric-foot">مجموع دانلود و آپلود</div>
+            </div>
+            <div class="metric">
+              <div class="metric-top"><span class="metric-label">ریکوئست امروز</span><span class="metric-icon">${icon('bolt')}</span></div>
+              <div class="metric-value" id="tgpReqToday">0</div>
+              <div class="metric-foot">درخواست‌های امروز</div>
+            </div>
+            <div class="metric">
+              <div class="metric-top"><span class="metric-label">کل ریکوئست‌ها</span><span class="metric-icon">${icon('activity')}</span></div>
+              <div class="metric-value" id="tgpReqTotal">0</div>
+              <div class="metric-foot">مجموع کل درخواست‌ها</div>
+            </div>
+            <div class="metric">
+              <div class="metric-top"><span class="metric-label">اتصالات زنده</span><span class="metric-icon">${icon('wifi')}</span></div>
+              <div class="metric-value" id="tgpOnline">0</div>
+              <div class="metric-foot">وضعیت کانکشن</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom: 12px;">
+            <div class="kv"><span>سکرت پروکسی</span><b id="tgpSecretView" class="mono" dir="ltr">—</b></div>
+            <div class="toolbar" style="margin-top: 10px;">
+              <button class="btn sm" type="button" data-act="tgp-copy-secret">${icon('copy')} کپی</button>
+              <button class="btn sm ghost" type="button" data-act="tgp-edit-secret">${icon('key')} تغییر</button>
+            </div>
+            <div id="tgpSecretEdit" style="display:none; margin-top: 10px;">
+              <div class="form-grid">
+                <div class="field"><label>سکرت جدید</label><input type="text" id="tgpNewSecret" class="mono" readonly dir="ltr"></div>
+              </div>
+              <div class="toolbar" style="margin-top: 8px;">
+                <button class="btn sm" type="button" data-act="tgp-random-secret-new">${icon('refresh')} تولید تصادفی</button>
+                <button class="btn sm primary" type="button" data-act="tgp-save-secret">ذخیره سکرت</button>
+                <button class="btn sm ghost" type="button" data-act="tgp-cancel-secret">انصراف</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="field"><label>لینک اتصال مستقیم به پروکسی در تلگرام</label><input type="text" id="tgpLink" class="mono" readonly dir="ltr"></div>
+            <div class="toolbar" style="margin-top: 10px;">
+              <button class="btn sm" type="button" data-act="tgp-copy-link">${icon('copy')} کپی لینک</button>
+              <a class="btn sm primary" id="tgpConnectLink" href="#" target="_blank" rel="noopener">${icon('telegram')} اتصال مستقیم در تلگرام</a>
+              <button class="btn sm ghost" type="button" data-act="tgp-health">${icon('pulse')} تست سلامت</button>
+            </div>
+            <div class="kv" style="margin-top: 6px;"><span>سرور / پورت</span><b id="tgpHost" class="mono" dir="ltr">—</b></div>
+          </div>
         </div>
       </div>
       <div class="modal-foot">
-        <button class="btn ghost" type="button" data-act="close-modal" data-modal="tgModal">بستن</button>
+        <button class="btn ghost" type="button" data-act="close-modal" data-modal="tgProxyModal">بستن</button>
       </div>
     </div>
   </div>
@@ -3871,13 +3923,6 @@ ${PWA_HEAD_TAGS}
     var ep = origin() + '/warp/' + encodeURIComponent(token);
     var html = '<div class="loc-card"><div><div class="loc-name">همه لوکیشن‌ها</div><div class="loc-meta">MULTI</div></div>' +
       '<div class="loc-acts"><button class="loc-act c-copy" type="button" data-act="copy" data-url="' + base + '?country=MULTI" title="کپی ساب" aria-label="کپی ساب">' + ICO.copy + '</button></div></div>' +
-      // کارت اختصاصی وب‌پروکسی و پروکسی تلگرام
-      '<div class="loc-card"><div><div class="loc-name">وب‌پروکسی و پروکسی تلگرام</div><div class="loc-meta">MTProto Fake-TLS · SOCKS5 · پیش‌نمایش بدون فیلتر کانال‌ها</div></div>' +
-      '<div class="toolbar">' +
-      '<button class="btn sm primary" type="button" data-act="open-tg">' + ICO.telegram + ' ساخت پروکسی تلگرام</button>' +
-      '<a class="btn sm" href="/webproxy" target="_blank" rel="noopener">' + ICO.external + ' وب‌پروکسی (/webproxy)</a>' +
-      '<button class="btn sm ghost" type="button" data-act="copy-tg-sub">' + ICO.copy + ' ساب تلگرام (/tg)</button>' +
-      '</div></div>' +
       // وارپ و اپن‌وی‌پی آماده، بدون اسکنر و بدون تنظیم
       '<div class="loc-card"><div><div class="loc-name">WARP / WARP PRO</div><div class="loc-meta">AmneziaWG + WireGuard · Clash · sing-box · IPv4+IPv6</div></div>' +
       '<div class="toolbar">' +
@@ -4405,32 +4450,169 @@ ${PWA_HEAD_TAGS}
   function toggleFxOnOff() {
     applyFx(FX_CHOICE === 'off' ? 'auto' : 'off');
   }
-  function buildTgProxiesInModal() {
-    var c = $('tgProxyCountry') ? $('tgProxyCountry').value : 'DE';
-    var s = $('tgProxySni') ? $('tgProxySni').value : 'www.google.com';
-    var box = $('tgProxyList');
-    if (box) box.innerHTML = '<div class="empty">در حال ساخت پروکسی‌های تلگرام و تست اتصال...</div>';
-    fetch(origin() + '/api/telegram/build?country=' + encodeURIComponent(c) + '&sni=' + encodeURIComponent(s))
-      .then(function(r) { return r.json(); })
+  // ——— پروکسی تلگرام (WEB proxy): ساخت، وضعیت، آمار و مدیریت ———
+  var tgpState = { configured: false, active: false, enabled: false, status: 'not_created', name: '', secret: '', telegramUrl: '', host: '', port: 443 };
+  var tgpTimer = null;
+
+  function tgpRandomSecret() {
+    var bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+    else for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+    return Array.prototype.map.call(bytes, function(b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  }
+  function tgpFormatBytes(value) {
+    var bytes = Number(value || 0);
+    if (bytes < 1024) return bytes + ' B';
+    var units = ['KB', 'MB', 'GB', 'TB'];
+    var idx = -1;
+    do { bytes = bytes / 1024; idx++; } while (bytes >= 1024 && idx < units.length - 1);
+    return (bytes >= 100 ? bytes.toFixed(0) : bytes.toFixed(2)) + ' ' + units[idx];
+  }
+  function tgpShowView(name) {
+    var loading = $('tgpLoading');
+    var create = $('tgpCreateView');
+    var manage = $('tgpManageView');
+    if (loading) loading.style.display = name === 'loading' ? 'block' : 'none';
+    if (create) create.style.display = name === 'create' ? 'block' : 'none';
+    if (manage) manage.style.display = name === 'manage' ? 'block' : 'none';
+  }
+  function tgpApply(data) {
+    tgpState = {
+      configured: Boolean(data.configured),
+      active: Boolean(data.active),
+      enabled: Boolean(data.enabled),
+      status: data.status || 'not_created',
+      name: data.name || '',
+      secret: data.secret || '',
+      telegramUrl: data.telegramUrl || '',
+      host: data.host || '',
+      port: Number(data.port || 443)
+    };
+    if (!tgpState.configured) {
+      tgpShowView('create');
+      if ($('tgpSecretInput') && !$('tgpSecretInput').value) $('tgpSecretInput').value = tgpRandomSecret();
+      if ($('tgpName') && !$('tgpName').value) $('tgpName').value = 'Telegram-Proxy';
+      return;
+    }
+    tgpShowView('manage');
+    var online = Number(data.onlineCount || 0) > 0;
+    var statusText = $('tgpStatusText');
+    if (statusText) {
+      statusText.textContent = tgpState.active
+        ? (online ? 'فعال · آنلاین و آمادهٔ اتصال' : 'فعال · در انتظار اتصال')
+        : 'متوقف';
+      statusText.style.color = tgpState.active ? (online ? 'var(--neon)' : 'var(--text)') : 'var(--danger)';
+    }
+    var toggleBtn = $('tgpToggleBtn');
+    if (toggleBtn) toggleBtn.innerHTML = tgpState.active
+      ? ICO.stop + ' توقف موقت'
+      : ICO.power + ' فعال‌سازی';
+    if ($('tgpTraffic')) $('tgpTraffic').textContent = tgpFormatBytes(data.trafficBytes);
+    if ($('tgpReqToday')) $('tgpReqToday').textContent = Number(data.requestsToday || 0).toLocaleString('fa-IR');
+    if ($('tgpReqTotal')) $('tgpReqTotal').textContent = Number(data.requestsTotal || 0).toLocaleString('fa-IR');
+    if ($('tgpOnline')) $('tgpOnline').textContent = online ? 'آنلاین' : 'آماده اتصال';
+    if ($('tgpSecretView')) $('tgpSecretView').textContent = tgpState.secret || '—';
+    if ($('tgpHost')) $('tgpHost').textContent = (tgpState.host || '—') + ':' + tgpState.port;
+    if ($('tgpLink')) $('tgpLink').value = tgpState.telegramUrl || '';
+    var connectLink = $('tgpConnectLink');
+    if (connectLink) {
+      if (tgpState.telegramUrl) { connectLink.href = tgpState.telegramUrl; connectLink.removeAttribute('aria-disabled'); }
+      else { connectLink.href = '#'; connectLink.setAttribute('aria-disabled', 'true'); }
+    }
+  }
+  function tgpRefresh(silent) {
+    return api('/api/telegram-proxy/status').then(function(d) {
+      if (!d || !d.success) {
+        if (!silent) { tgpShowView('create'); showToast((d && d.message) || 'دریافت وضعیت پروکسی ناموفق بود', 'err'); }
+        return d;
+      }
+      tgpApply(d);
+      return d;
+    }).catch(function() {
+      if (!silent) showToast('خطای شبکه در دریافت وضعیت پروکسی', 'err');
+    });
+  }
+  function openTgProxyModal() {
+    openModal('tgProxyModal');
+    tgpShowView('loading');
+    if ($('tgpSecretEdit')) $('tgpSecretEdit').style.display = 'none';
+    tgpRefresh();
+    if (tgpTimer) clearInterval(tgpTimer);
+    tgpTimer = setInterval(function() {
+      var modal = $('tgProxyModal');
+      if (!modal || !modal.classList.contains('is-open')) {
+        clearInterval(tgpTimer);
+        tgpTimer = null;
+        return;
+      }
+      tgpRefresh(true);
+    }, 6000);
+  }
+  function tgpCreate() {
+    var secret = (($('tgpSecretInput') && $('tgpSecretInput').value) || '').trim() || tgpRandomSecret();
+    var name = (($('tgpName') && $('tgpName').value) || '').trim() || 'Telegram-Proxy';
+    api('/api/telegram-proxy/save', { method: 'POST', body: JSON.stringify({ name: name, secret: secret }) })
       .then(function(d) {
-        if (!box) return;
-        if (!d || !d.success || !d.proxies || !d.proxies.length) {
-          box.innerHTML = '<div class="empty">پروکسی تلگرامی یافت نشد.</div>';
-          return;
-        }
-        box.innerHTML = '<table class="scan"><thead><tr><th>نوع</th><th>سرور و پورت</th><th>SNI / استتار</th><th>اتصال فوری</th></tr></thead><tbody>' +
-          d.proxies.map(function(p) {
-            return '<tr><td><span class="tag on">' + escHtml(p.type) + '</span></td>' +
-              '<td class="mono">' + escHtml(p.server + ':' + p.port) + '</td>' +
-              '<td class="mono">' + escHtml(p.sni || '—') + '</td>' +
-              '<td><div class="toolbar"><a class="btn sm primary" href="' + escHtml(p.tgUrl) + '">اتصال تلگرام</a>' +
-              '<button class="btn sm" type="button" data-act="copy" data-url="' + escHtml(p.tmeUrl) + '">کپی لینک</button></div></td></tr>';
-          }).join('') + '</tbody></table>';
-        showToast(d.message || 'پروکسی‌های تلگرام ساخته شدند', 'ok');
+        if (!d || !d.success) { showToast((d && d.message) || 'ساخت پروکسی ناموفق بود', 'err'); return; }
+        showToast('پروکسی تلگرام ساخته و فعال شد', 'ok');
+        tgpRefresh();
       })
-      .catch(function() {
-        if (box) box.innerHTML = '<div class="empty">خطا در ساخت پروکسی تلگرام</div>';
-      });
+      .catch(function() { showToast('خطای شبکه در ساخت پروکسی', 'err'); });
+  }
+  function tgpToggle() {
+    api('/api/telegram-proxy/toggle', { method: 'POST', body: JSON.stringify({ enabled: !tgpState.active }) })
+      .then(function(d) {
+        if (!d || !d.success) { showToast((d && d.message) || 'تغییر وضعیت پروکسی ناموفق بود', 'err'); return; }
+        showToast(d.enabled ? 'پروکسی تلگرام فعال شد' : 'پروکسی تلگرام موقتاً متوقف شد', 'ok');
+        tgpRefresh();
+      })
+      .catch(function() { showToast('خطای شبکه در تغییر وضعیت پروکسی', 'err'); });
+  }
+  function tgpResetStats() {
+    if (!ask('آمار مصرف و ریکوئست‌های پروکسی تلگرام صفر شود؟')) return;
+    api('/api/telegram-proxy/reset-stats', { method: 'POST' })
+      .then(function(d) {
+        if (!d || !d.success) { showToast((d && d.message) || 'صفر کردن آمار ناموفق بود', 'err'); return; }
+        showToast('آمار پروکسی صفر شد', 'ok');
+        tgpRefresh(true);
+      })
+      .catch(function() { showToast('خطای شبکه در صفر کردن آمار', 'err'); });
+  }
+  function tgpDelete() {
+    if (!ask('پروکسی تلگرام حذف شود؟ سکرت فعلی دیگر قابل استفاده نخواهد بود.')) return;
+    api('/api/telegram-proxy/delete', { method: 'POST' })
+      .then(function(d) {
+        if (!d || !d.success) { showToast((d && d.message) || 'حذف پروکسی ناموفق بود', 'err'); return; }
+        showToast('پروکسی تلگرام حذف شد', 'ok');
+        if ($('tgpSecretInput')) $('tgpSecretInput').value = tgpRandomSecret();
+        tgpRefresh();
+      })
+      .catch(function() { showToast('خطای شبکه در حذف پروکسی', 'err'); });
+  }
+  function tgpSaveSecret() {
+    var secret = (($('tgpNewSecret') && $('tgpNewSecret').value) || '').trim();
+    if (!/^(?:[0-9a-f]{32}|dd[0-9a-f]{32})$/i.test(secret)) {
+      showToast('سکرت باید ۳۲ کاراکتر هگز باشد (یا با پیشوند dd)', 'err');
+      return;
+    }
+    api('/api/telegram-proxy/update-secret', { method: 'POST', body: JSON.stringify({ secret: secret }) })
+      .then(function(d) {
+        if (!d || !d.success) { showToast((d && d.message) || 'ذخیرهٔ سکرت ناموفق بود', 'err'); return; }
+        if ($('tgpSecretEdit')) $('tgpSecretEdit').style.display = 'none';
+        if ($('tgpNewSecret')) $('tgpNewSecret').value = '';
+        showToast('سکرت پروکسی تغییر کرد', 'ok');
+        tgpRefresh();
+      })
+      .catch(function() { showToast('خطای شبکه در ذخیرهٔ سکرت', 'err'); });
+  }
+  function tgpHealth() {
+    fetch(origin() + '/healthz', { cache: 'no-store' })
+      .then(function(res) { return res.json().catch(function() { return null; }); })
+      .then(function(d) {
+        if (d && d.ok) showToast('سلامت پروکسی تأیید شد · رلهٔ مستقیم دیتاسنتر تلگرام', 'ok');
+        else showToast('پروکسی پاسخ سلامت نداد؛ ابتدا آن را فعال کنید', 'err');
+      })
+      .catch(function() { showToast('تست سلامت ناموفق بود', 'err'); });
   }
   window.addEventListener('resize', function() {
     if (fx.mode && fx.mode !== 'off') fxResize();
@@ -5638,6 +5820,8 @@ ${PWA_HEAD_TAGS}
   function closeModal(id) {
     var m = $(id);
     if (m) m.classList.remove('is-open');
+    // پایان تازه‌سازی خودکار وضعیت پروکسی تلگرام با بستن پنجره
+    if (id === 'tgProxyModal' && tgpTimer) { clearInterval(tgpTimer); tgpTimer = null; }
     // بستن راهنما شروع شمارش سه‌ثانیه‌ای پنجرهٔ بروزرسانی است.
     if (id === 'helpModal') scheduleUpdatePrompt();
   }
@@ -5745,9 +5929,25 @@ ${PWA_HEAD_TAGS}
     else if (act === 'open-theme') { updateThemeCards(); if ($('fxToggleSwitch')) $('fxToggleSwitch').checked = FX_CHOICE !== 'off'; openModal('themeModal'); }
     else if (act === 'set-theme') { setTheme(el.getAttribute('data-skin')); }
     else if (act === 'open-fx') { toggleFxOnOff(); }
-    else if (act === 'open-tg') { openModal('tgModal'); buildTgProxiesInModal(); }
-    else if (act === 'build-tg-proxy') { buildTgProxiesInModal(); }
-    else if (act === 'copy-tg-sub') { copyText(origin() + '/tg?format=links&country=' + (($('tgProxyCountry') && $('tgProxyCountry').value) || 'DE'), 'لینک اشتراک پروکسی تلگرام کپی شد'); }
+    else if (act === 'open-tg-proxy') { openTgProxyModal(); }
+    else if (act === 'tgp-create') { tgpCreate(); }
+    else if (act === 'tgp-random-secret') { if ($('tgpSecretInput')) $('tgpSecretInput').value = tgpRandomSecret(); }
+    else if (act === 'tgp-random-secret-new') { if ($('tgpNewSecret')) $('tgpNewSecret').value = tgpRandomSecret(); }
+    else if (act === 'tgp-toggle') { tgpToggle(); }
+    else if (act === 'tgp-reset-stats') { tgpResetStats(); }
+    else if (act === 'tgp-delete') { tgpDelete(); }
+    else if (act === 'tgp-copy-secret') { copyText(tgpState.secret, 'سکرت پروکسی کپی شد'); }
+    else if (act === 'tgp-copy-link') { copyText(tgpState.telegramUrl, 'لینک پروکسی کپی شد'); }
+    else if (act === 'tgp-edit-secret') {
+      var tgpEditBox = $('tgpSecretEdit');
+      if (tgpEditBox) {
+        tgpEditBox.style.display = 'block';
+        if ($('tgpNewSecret') && !$('tgpNewSecret').value) $('tgpNewSecret').value = tgpRandomSecret();
+      }
+    }
+    else if (act === 'tgp-cancel-secret') { if ($('tgpSecretEdit')) $('tgpSecretEdit').style.display = 'none'; }
+    else if (act === 'tgp-save-secret') { tgpSaveSecret(); }
+    else if (act === 'tgp-health') { tgpHealth(); }
     else if (act === 'set-fx') { applyFx(el.getAttribute('data-fx')); }
     else if (act === 'install-app') { promptInstall(); }
     else if (act === 'toggle-lang') { toggleLang(); }
